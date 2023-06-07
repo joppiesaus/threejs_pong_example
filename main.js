@@ -6,6 +6,10 @@ const PADDLE_WIDTH = 0.2;
 const PADDLE_HEIGHT = 3;
 const BALL_SIZE = 0.2;
 
+const PADDLE_POSITION_X = 5;
+
+const INITIAL_BALL_VELOCITY = new THREE.Vector3( -2, 0.5, 0 );
+
 let clock;
 let scene, camera, renderer;
 
@@ -23,10 +27,10 @@ function init() {
     clock = new THREE.Clock();
 
     scene = new THREE.Scene();
-    camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 1000 );
+    camera = new THREE.PerspectiveCamera( 75, window.innerWidth / Math.floor( window.innerWidth * 9 / 16 ), 0.1, 1000 );
 
     renderer = new THREE.WebGLRenderer( { antialias: true } );
-    renderer.setSize( window.innerWidth, window.innerHeight );
+    renderer.setSize( window.innerWidth, Math.floor( window.innerWidth * 9 / 16 ) );
     document.body.appendChild( renderer.domElement );
 
     camera.position.z = 5;
@@ -37,8 +41,8 @@ function init() {
     scene.add( light );
 
 
-    createPaddle( -4 );
-    createPaddle(  4 );
+    createPaddle( -PADDLE_POSITION_X );
+    createPaddle(  PADDLE_POSITION_X );
 
     createBall();
 
@@ -68,7 +72,7 @@ function createBall() {
     const ballGeometry = new THREE.SphereGeometry( 0.2 );
 
     ball = {
-        velocity: new THREE.Vector3( -2, 0.5, 0 ),
+        velocity: (new THREE.Vector3()).copy( INITIAL_BALL_VELOCITY ), // if you'd just do INITIAL_BALL_VELOCITY, you'd change that value
         mesh: new THREE.Mesh( ballGeometry, ballMaterial ),
 
         update: function( delta ) {
@@ -86,6 +90,7 @@ function createBall() {
                     this.mesh.position.x > paddle.position.x - widthOffset ) {
 
                     this.velocity.multiplyScalar( -1.0 );
+                    // TODO: make ball reflect
 
                 }
             }
@@ -93,13 +98,12 @@ function createBall() {
             // ball out of screen, reset
             if ( Math.abs( this.mesh.position.x ) > 6 ) {
 
-                this.velocity.set( -2, 0, 0 );
+                this.velocity.copy( INITIAL_BALL_VELOCITY );
                 this.mesh.position.set( 0, 0, 0 );
 
             }
 
             // TODO: make sure ball can bounce on sides of the screen.
-            // TODO: make viewport always same aspect ratio/predictable.
 
             const step = this.velocity.clone().multiplyScalar( delta );
 
@@ -136,7 +140,7 @@ function render() {
 function onWindowResize() {
 
     const canvasWidth = window.innerWidth;
-    const canvasHeight = window.innerHeight;
+    const canvasHeight =Math.floor( window.innerWidth * 9 / 16 );
 
     renderer.setSize( canvasWidth, canvasHeight );
 
