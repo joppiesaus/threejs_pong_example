@@ -4,11 +4,14 @@ import * as THREE from 'three';
 
 const PADDLE_WIDTH = 0.2;
 const PADDLE_HEIGHT = 3;
+const BORDER_GEOMETRY = new THREE.BoxGeometry( 9.25, 0.15, 1.5 );
+const BORDER_POSITION_Y = 3.25;
 const BALL_SIZE = 0.2;
 
 const PADDLE_POSITION_X = 5;
 
-const INITIAL_BALL_VELOCITY = new THREE.Vector3( -2, 0.5, 0 );
+const INITIAL_BALL_DIRECTION = (new THREE.Vector3( 2, 1.1, 0 )).normalize();
+const INITIAL_BALL_VELOCITY = 2.5;
 
 let clock;
 let scene, camera, renderer;
@@ -16,6 +19,7 @@ let scene, camera, renderer;
 let paddleMaterial;
 
 let paddles = [];
+let collision_objects = [];
 
 let ball;
 
@@ -44,6 +48,9 @@ function init() {
     createPaddle( -PADDLE_POSITION_X );
     createPaddle(  PADDLE_POSITION_X );
 
+    createBorder( -BORDER_POSITION_Y );
+    createBorder(  BORDER_POSITION_Y );
+
     createBall();
 
 
@@ -58,11 +65,29 @@ function createPaddle( x ) {
 
     let paddle = new THREE.Mesh( geometry, paddleMaterial );
     paddle.position.set( x, 0, 0 );
+    paddle.userData.normal = new THREE.Vector3( 0, 0, 0 );
+    paddle.userData.normal.x = x > 0 ? -1 : 1;
 
     scene.add( paddle );
     paddles.push( paddle );
+    collision_objects.push( paddle );
 
     return paddle;
+
+}
+
+function createBorder( y )
+{
+
+    let border = new THREE.Mesh( BORDER_GEOMETRY, paddleMaterial );
+    border.position.set( 0, y, 0 );
+    border.userData.normal = new THREE.Vector3( 0, 0, 0 );
+    border.userData.normal.y = y > 0 ? -1 : 1;
+
+    scene.add( border );
+    collision_objects.push( border );
+
+    return border;
 
 }
 
@@ -72,40 +97,54 @@ function createBall() {
     const ballGeometry = new THREE.SphereGeometry( 0.2 );
 
     ball = {
-        velocity: (new THREE.Vector3()).copy( INITIAL_BALL_VELOCITY ), // if you'd just do INITIAL_BALL_VELOCITY, you'd change that value
+        direction: (new THREE.Vector3()).copy( INITIAL_BALL_DIRECTION ), // if you'd just do INITIAL_BALL_DIRECTION, you'd change that value
         mesh: new THREE.Mesh( ballGeometry, ballMaterial ),
 
         update: function( delta ) {
 
-            const paddle = paddles[ this.velocity.x < 0 ? 0 : 1 ];
-            const widthOffset = PADDLE_WIDTH / 2 + BALL_SIZE / 2;
-            const heightOffset = PADDLE_HEIGHT / 2;
+            for ( let i = 0; i < collision_objects.length; i++ ) {
 
-            if ( this.mesh.position.y < paddle.position.y + heightOffset &&
-                 this.mesh.position.y > paddle.position.y - heightOffset )
-            {
+                const obj = collision_objects[ i ];
 
-                // TODO: on weird lag spike, ball might be forever "inside" the paddle, never escaping it.
-                if ( this.mesh.position.x < paddle.position.x + widthOffset && 
-                    this.mesh.position.x > paddle.position.x - widthOffset ) {
+                // WARNING: this will not change when you change the geometry!
+                // TODO: more accurate collision by calculating distance from surface to ball, right now it's sqauare
+                // - square, not square - sphere
+                const widthOffset = obj.geometry.parameters.width / 2 + BALL_SIZE / 2;
+                const heightOffset = obj.geometry.parameters.height / 2 + BALL_SIZE / 2;
 
-                    this.velocity.multiplyScalar( -1.0 );
-                    // TODO: make ball reflect
+                if ( this.mesh.position.x < obj.position.x + widthOffset &&
+                     this.mesh.position.x > obj.position.x - widthOffset &&
+                     this.mesh.position.y < obj.position.y + heightOffset &&
+                     this.mesh.position.y > obj.position.y - heightOffset) {
+
+                    // TODO: when there's lag, the ball can "get stuck" inside
+                    // Fix this by setting the offset
+
+                    // we've made a collision, reflect(thanks MiniRT)
+
+                    const normal = obj.userData.normal;
+
+                    // out = ray in - 2 * (cos angle) * normal
+                    // out = ray in - 2 * (normal . ray in) * normal
+                    let normalTemp = (new THREE.Vector3()).copy( normal );
+                    this.direction.sub( normalTemp.multiplyScalar( 2.0 * normal.dot( this.direction ) ) );
+
+                    // assume only one collision at the time, so we can stop
+                    break;
 
                 }
+
             }
 
             // ball out of screen, reset
             if ( Math.abs( this.mesh.position.x ) > 6 ) {
 
-                this.velocity.copy( INITIAL_BALL_VELOCITY );
+                this.direction.copy( INITIAL_BALL_DIRECTION );
                 this.mesh.position.set( 0, 0, 0 );
 
             }
 
-            // TODO: make sure ball can bounce on sides of the screen.
-
-            const step = this.velocity.clone().multiplyScalar( delta );
+            const step = this.direction.clone().multiplyScalar( delta ).multiplyScalar( INITIAL_BALL_VELOCITY );
 
             this.mesh.position.add( step );
 
@@ -140,7 +179,7 @@ function render() {
 function onWindowResize() {
 
     const canvasWidth = window.innerWidth;
-    const canvasHeight =Math.floor( window.innerWidth * 9 / 16 );
+    const canvasHeight = Math.floor( window.innerWidth * 9 / 16 );
 
     renderer.setSize( canvasWidth, canvasHeight );
 
